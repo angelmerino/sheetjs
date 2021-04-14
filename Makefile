@@ -27,7 +27,7 @@ UGLIFYOPTS=--support-ie8 -m
 all: $(TARGET) $(AUXTARGETS) $(AUXSCPTS) $(MINITGT) ## Build library and auxiliary scripts
 
 $(FLOWTGTS): %.js : %.flow.js
-	node -e 'process.stdout.write(require("fs").readFileSync("$<","utf8").replace(/^[ \t]*\/\*[:#][^*]*\*\/\s*(\n)?/gm,"").replace(/\/\*[:#][^*]*\*\//gm,""))' > $@
+	# node -e 'process.stdout.write(require("fs").readFileSync("$<","utf8").replace(/^[ \t]*\/\*[:#][^*]*\*\/\s*(\n)?/gm,"").replace(/\/\*[:#][^*]*\*\//gm,""))' > $@
 
 $(FLOWTARGET): $(DEPS)
 	cat $^ | tr -d '\15\32' > $@

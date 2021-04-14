@@ -4700,6 +4700,7 @@ function write_ct(ct, opts) {
 	f3('vba');
 	f3('comments');
 	f3('drawings');
+	o[o.length] = '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
 	if(o.length>2){ o[o.length] = ('</Types>'); o[1]=o[1].replace("/>",">"); }
 	return o.join("");
 }
@@ -4751,6 +4752,40 @@ var RELS_ROOT = writextag('Relationships', null, {
 	//'xmlns:ns0': XMLNS.RELS,
 	'xmlns': XMLNS.RELS
 });
+
+var DRAW_ROOT = writextag('xdr:wsDr', null, {
+	'xmlns:xdr': 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing',
+	'xmlns:a': 'http://schemas.openxmlformats.org/drawingml/2006/main'
+	//'xmlns:ns0': XMLNS.RELS,
+	// 'xmlns': XMLNS.RELS
+});
+
+function write_drawing(images) {
+	var o = [];
+	o[o.length] = (XML_HEADER);
+	o[o.length] = (DRAW_ROOT);
+
+	for (var i = 0; i < images.length; i++) {
+		var image = images[i];
+		var pos = image.position || {};
+		if (pos.type === 'twoCellAnchor') {
+			var from = pos.from || {}, to = pos.to || {},
+			    fromCol = from.col || 0, toCol = to.col || 0,
+			    fromRow = from.row || 0, toRow = to.row || 0;
+
+			var twoCell = '<xdr:from><xdr:col>'+fromCol+'</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+fromRow+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>';
+			twoCell += '<xdr:to><xdr:col>'+toCol+'</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+toRow+'</xdr:row><xdr:rowOff>99999</xdr:rowOff></xdr:to>';
+			twoCell += '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(i+1)+'" name="'+image.name+'">'
+			twoCell += '</xdr:cNvPr><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>';
+			twoCell += '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId'+(i+1)+'"/>';
+			twoCell += '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/>';
+			o[o.length] = (writextag('xdr:twoCellAnchor', twoCell, images[i].attrs));
+		}
+	}
+
+	if(o.length>2){ o[o.length] = ('</xdr:wsDr>'); o[1]=o[1].replace("/>",">"); }
+	return o.join("");
+}
 
 /* TODO */
 function write_rels(rels) {
@@ -8885,6 +8920,7 @@ function rgb_tint(hex, tint) {
 var DEF_MDW = 6, MAX_MDW = 15, MIN_MDW = 1, MDW = DEF_MDW;
 function width2px(width) { return Math.floor(( width + (Math.round(128/MDW))/256 )* MDW ); }
 function px2char(px) { return (Math.floor((px - 5)/MDW * 100 + 0.5))/100; }
+function px2pt(px) { return px * 72 / 96; }
 function char2width(chr) { return (Math.round((chr * MDW + 5)/MDW*256))/256; }
 //function px2char_(px) { return (((px - 5)/MDW * 100 + 0.5))/100; }
 //function char2width_(chr) { return (((chr * MDW + 5)/MDW*256))/256; }
@@ -13822,6 +13858,9 @@ ws['!links'].forEach(function(l) {
 	/* webPublishItems */
 	/* tableParts */
 	/* extLst */
+
+	var images = ws['!images'] || [];
+	if (images.length) o[o.length] = '<drawing r:id="rId1"/>';
 
 	if(o.length>1) { o[o.length] = ('</worksheet>'); o[1]=o[1].replace("/>",">"); }
 	return o.join("");
@@ -20865,6 +20904,23 @@ f = "docProps/app.xml";
 		case "chart":
 			/* falls through */
 		default:
+			var s = wb.SheetNames[rId-1], ws = wb.Sheets[s],
+			images = ws['!images'] || [];
+			var rels = ws['!rels'] = [], draw_rels = [];
+			for (var sId=1; sId < images.length+1; ++sId) {
+				var image = images[sId - 1];
+				f = 'xl/media/' + image.name;
+				zip.file(f, image.data, image.opts);
+				add_rels(draw_rels, sId, "../media/" + image.name, RELS.IMG);
+			}
+			zip.file("xl/drawings/drawing" + rId + "." + wbext, write_drawing(images));
+			add_rels(rels, rId, "../drawings/drawing" + rId + "." + wbext, RELS.DRAW);
+			// Extra stuff IMAGES
+			if(Object.entries(draw_rels).length > 0)
+				zip.file("xl/drawings/_rels/drawing" + rId + "." + wbext + ".rels", write_rels(draw_rels));
+			// zip.file("xl/drawings/_rels/drawing" + rId + "." + wbext + ".rels", write_rels(draw_rels));
+			zip.file("xl/worksheets/_rels/sheet" + rId + "." + wbext + '.rels', write_rels(rels));
+			
 			f = "xl/worksheets/sheet" + rId + "." + wbext;
 			zip_add_file(zip, f, write_ws(rId-1, f, opts, wb, wsrels));
 			ct.sheets.push(f);
